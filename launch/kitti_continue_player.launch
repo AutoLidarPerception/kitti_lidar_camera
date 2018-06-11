@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<launch>
+    <!-- Keyboard listener is based on Linux input subsystem -->
+    <arg name="keyboard_file" default="/dev/input/event3" />
+
+    <arg name="mode" default="play" />
+
+    <!-- default 10Hz, the same as LiDAR -->
+    <!--<arg name="fps" default="8" />-->
+    <!-- for learning node training -->
+    <arg name="fps" default="0.5" />
+
+    <arg name="dataset_file" default="$(find kitti_ros)/../../data/training_datasets.txt"/>
+
+    <arg name="filter_by_camera_angle" default="true"/>
+    <!--<arg name="filter_by_camera_angle" default="false"/>-->
+
+    <!-- load -->
+    <node name="kitti_player" pkg="kitti_ros" type="kitti_continue_player.py" output="screen">
+        <param name="keyboard_file" value="$(arg keyboard_file)"/>
+        <param name="mode" value="$(arg mode)"/>
+        <param name="fps" value="$(arg fps)"/>
+        <param name="dataset_file" value="$(arg dataset_file)"/>
+
+        <!-- []  means no forground objects -->
+        <!--<rosparam param="care_objects">[]</rosparam>-->
+        <!--<rosparam param="care_objects">['Car','Van','Truck','Pedestrian','Sitter','Cyclist','Tram','Misc']</rosparam>-->
+        <!--Only Vehicles-->
+        <!--<rosparam param="care_objects">['Car', 'Van', 'Truck']</rosparam>-->
+        <!--Foreground Objects-->
+        <rosparam param="care_objects">['Car','Van','Truck','Pedestrian','Cyclist']</rosparam>
+
+        <param name="filter_by_camera_angle" value="$(arg filter_by_camera_angle)"/>
+    </node>
+
+
+</launch>
