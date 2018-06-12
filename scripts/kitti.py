@@ -225,6 +225,20 @@ def publish_raw_clouds(publisher, header, points):
     cloud = pc2.create_cloud(header, fields, points)
     publisher.publish(cloud)
 
+def publish_rgb_clouds(publisher, header, points):
+    fields = [PointField('x', 0, PointField.FLOAT32, 1),
+              PointField('y', 4, PointField.FLOAT32, 1),
+              PointField('z', 8, PointField.FLOAT32, 1),
+              PointField('rgb', 12, PointField.UINT32, 1)]
+    # fields = [PointField('x', 0, PointField.FLOAT32, 1),
+    #           PointField('y', 4, PointField.FLOAT32, 1),
+    #           PointField('z', 8, PointField.FLOAT32, 1),
+    #           PointField('r', 12, PointField.FLOAT32, 1),
+    #           PointField('g', 16, PointField.FLOAT32, 1),
+    #           PointField('b', 20, PointField.FLOAT32, 1)]
+    cloud = pc2.create_cloud(header, fields, points)
+    publisher.publish(cloud)
+
 def publish_raw_image(publisher, header, img):
     msg_img = Image()
     try:

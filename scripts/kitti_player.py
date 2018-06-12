@@ -22,6 +22,7 @@ import datetime as dt
 # from collections import namedtuple
 import numpy as np
 import math
+import struct
 
 import pykitti.utils as kitti
 
@@ -29,8 +30,8 @@ from kitti import read_label_from_xml
 from kitti import load_pc_from_bin
 from kitti import filter_by_camera_angle
 from kitti import get_boxcorners
-from kitti import read_calib_file
 from kitti import publish_raw_clouds
+from kitti import publish_rgb_clouds
 from kitti import publish_ground_truth_boxes
 from kitti import publish_ground_truth_markers
 from kitti import publish_raw_image
@@ -117,6 +118,7 @@ if __name__ == "__main__":
     rospy.init_node("kitti_player")
     # Publisher of Kitti raw data: point cloud & image & ground truth
     pub_points = rospy.Publisher("/kitti/points_raw", PointCloud2, queue_size=1000000)
+    pub_points_rgb = rospy.Publisher("/kitti/points_rgb", PointCloud2, queue_size=1000000)
     pub_img = rospy.Publisher("/kitti/img_raw", Image, queue_size=1000000)
     pub_img_depth = rospy.Publisher("/kitti/img_depth", Image, queue_size=1000000)
     ground_truth_pub_ = rospy.Publisher("/kitti/bb_raw", PoseArray, queue_size=1000000)
@@ -255,6 +257,7 @@ if __name__ == "__main__":
 
         image = cv2.imread(img_path + "/" + img_files[idx])
         image_size = image.shape
+        image_depth = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
 
         ##TODO timestamp
         #header_.stamp = rospy.Time.from_sec(timestamps[idx].total_seconds())
@@ -296,6 +299,12 @@ if __name__ == "__main__":
         # Camera angle filters
         if filter_by_camera_angle_:
             pc = filter_by_camera_angle(pc)
+
+            # XYZRGB point cloud
+            pc_rgb = np.zeros((pc.shape[0], 4), dtype=np.float32)
+            # pc_rgb = np.zeros((pc.shape[0], 6), dtype=np.float32)
+            pc_rgb[:, :3] = pc[:, :3]
+
             xyz = pc.copy()
             xyz[:,3] = 1.0
             # project into image
@@ -315,9 +324,16 @@ if __name__ == "__main__":
 
                 if (row_idx >= 0 and row_idx < image_size[0]) \
                     and (col_idx >= 0 and col_idx < image_size[1]):
-                    # image[row_idx][col_idx] = get_rainbow_color(pc[pt][3])
-                    image[row_idx][col_idx] = get_rainbow_color(depth[pt])
-                    # print
+                    # assign image color to point cloud
+                    color =   (image[row_idx][col_idx][2] << 16) \
+                            | (image[row_idx][col_idx][1] << 8) \
+                            | image[row_idx][col_idx][0]
+                    pc_rgb[pt, 3] = color
+                    # pc_rgb[pt, 3] = image[row_idx][col_idx][2]
+                    # pc_rgb[pt, 4] = image[row_idx][col_idx][1]
+                    # pc_rgb[pt, 5] = image[row_idx][col_idx][0]
+                    # image_depth[row_idx][col_idx] = get_rainbow_color(pc[pt][3])
+                    image_depth[row_idx][col_idx] = get_rainbow_color(depth[pt])
 
         places = None
         rotates_z = None
@@ -336,6 +352,7 @@ if __name__ == "__main__":
             corners = get_boxcorners(places, rotates_z, size)
 
         publish_raw_clouds(pub_points, header_, pc)
+        publish_rgb_clouds(pub_points_rgb, header_, pc_rgb)
 
         if corners is not None:
             publish_ground_truth_boxes(ground_truth_pub_, header_, places, rotates_z, size)
@@ -353,6 +370,8 @@ if __name__ == "__main__":
         """
             publish RGB image
         """
+        image_depth = cv2.cvtColor(image_depth, cv2.COLOR_HSV2BGR)
+        publish_raw_image(pub_img_depth, header_, image_depth)
         publish_raw_image(pub_img, header_, image)
         print "###########"
         print "[INFO] Show image: ",img_files[idx]
