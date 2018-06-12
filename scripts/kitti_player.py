@@ -21,9 +21,9 @@ import datetime as dt
 # import time
 # from collections import namedtuple
 import numpy as np
+import math
 
 import pykitti.utils as kitti
-# import transform.transform as transform
 
 from kitti import read_label_from_xml
 from kitti import load_pc_from_bin
@@ -58,6 +58,39 @@ def on_keyboard(name_dev):
                 # KEY_VAL will keep until next pressed
                 KEY_VAL = event.code
 
+"""
+  https://github.com/ros-visualization/rviz/blob/kinetic-devel/src/rviz/default_plugin/point_cloud_transformers.cpp
+  :return
+    Rainbow color (rgb8) from val in [0., 1.]
+"""
+def get_rainbow_color(val, min_val=0., diff=255):
+    value = 1.0 - (val - min_val)
+    # restrict value between 0 and 1
+    value = max(value, 0.)
+    value = min(value, 1.)
+
+    h = value * 5.0 + 1.0
+    i = int(h)
+    f = h - i
+    # if i is even
+    if not i&1:
+        f = 1 - f
+    n = int((1 - f)*diff)
+    bgr = [0]*3
+    if i <= 1:
+        bgr[2] = n; bgr[1] = 0; bgr[0] = 255
+    elif i == 2:
+        bgr[2] = 0; bgr[1] = n; bgr[0] = 255
+    elif i == 3:
+        bgr[2] = 0; bgr[1] = 255; bgr[0] = n
+    elif i == 4:
+        bgr[2] = n; bgr[1] = 255; bgr[0] = 0
+    elif i >= 5:
+        bgr[2] = 255; bgr[1] = n; bgr[0] = 0
+    # print bgr
+    return bgr
+
+
 if __name__ == "__main__":
     # ROS parameters
     keyboard_file = rospy.get_param("/kitti_player/keyboard_file", "/dev/input/event3")
@@ -85,6 +118,7 @@ if __name__ == "__main__":
     # Publisher of Kitti raw data: point cloud & image & ground truth
     pub_points = rospy.Publisher("/kitti/points_raw", PointCloud2, queue_size=1000000)
     pub_img = rospy.Publisher("/kitti/img_raw", Image, queue_size=1000000)
+    pub_img_depth = rospy.Publisher("/kitti/img_depth", Image, queue_size=1000000)
     ground_truth_pub_ = rospy.Publisher("/kitti/bb_raw", PoseArray, queue_size=1000000)
 
     object_marker_pub_ = rospy.Publisher("/kitti/bb_marker", MarkerArray, queue_size=1000000)
@@ -108,13 +142,13 @@ if __name__ == "__main__":
     timestamp_file = path + "/" + "velodyne_points/timestamps.txt"
 
     pcd_path = None
-    bin_path = path + "/" + "velodyne_points/data"
-    oxts_path = path + "/" + "oxts/data"
+    bin_path = path + "/velodyne_points/data"
+    oxts_path = path + "/oxts/data"
     # img_path = path + "/" + "image_0[0-3]/data/"
-    img_path = path + "/" + "image_02/data"
+    img_path = path + "/image_02/data"
 
-    # calib_imu_to_velo_file = path + "/../calib_cam_to_cam.txt"
-    # calib_imu_to_velo_file = path + "/../calib_velo_to_cam.txt"
+    calib_cam_to_cam_file = path + "/../calib_cam_to_cam.txt"
+    calib_velo_to_cam_file = path + "/../calib_velo_to_cam.txt"
     calib_imu_to_velo_file = path + "/../calib_imu_to_velo.txt"
 
     tracklet_file = path + "/" + "tracklet_labels.xml"
@@ -150,7 +184,6 @@ if __name__ == "__main__":
     poses = []
     for pose in kitti.get_oxts_packets_and_poses(pose_files):
         poses.append(pose[1])
-    # print len(poses)
 
     img_files = []
     if os.path.isdir(img_path):
@@ -161,23 +194,45 @@ if __name__ == "__main__":
                 img_files.append(f)
     img_files.sort()
 
-    if calib_imu_to_velo_file:
-        calib = read_calib_file(calib_imu_to_velo_file)
+    calib_imu2velo = kitti.read_calib_file(calib_imu_to_velo_file)
+    imu2vel = np.zeros((4, 4))
+    imu2vel[:3,:3] = np.array(calib_imu2velo['R']).reshape(-1, 3)
+    imu2vel[:3,3] = calib_imu2velo['T']
+    imu2vel[3,3] = 1.
 
-        # proj_velo = proj_to_velo(calib)[:, :3]
-        # euler_static = transform.rotationMatrixToEulerAngles(np.array(calib['R']).reshape(-1, 3))
-        # translation_static = calib['T']
+    vel2imu = trans.inverse_matrix(imu2vel)
+    translation_static = trans.translation_from_matrix(vel2imu)
+    quaternion_static = trans.quaternion_from_matrix(vel2imu)
+    # print translation_static
+    # print quaternion_static
 
-        imu2vel = np.zeros((4, 4))
-        imu2vel[:3,:3] = np.array(calib['R']).reshape(-1, 3)
-        imu2vel[:3,3] = calib['T']
-        imu2vel[3,3] = 1.
+    calib_cam2cam = kitti.read_calib_file(calib_cam_to_cam_file)
+    # To project a 3D point x in reference camera coordinates to a point y on the i'th image plane,
+    # the rectifying rotation matrix of the reference camera: R_rect_00 must be considered as well.
+    R_rect_00 = np.zeros((4, 4))
+    R_rect_00[:3,:3] = np.array(calib_cam2cam['R_rect_00']).reshape(-1, 3)
+    R_rect_00[3,3] = 1.
+    print("     ----------- R_rect_00 -----------")
+    print R_rect_00
+    # To project to a point in the i'th camera image, 0...3
+    P_rect_02 = np.zeros((3, 4))
+    P_rect_02 = np.array(calib_cam2cam['P_rect_02']).reshape(-1, 4)
+    print("     ----------- P_rect_02 -----------")
+    print P_rect_02
 
-        vel2imu = trans.inverse_matrix(imu2vel)
-        translation_static = trans.translation_from_matrix(vel2imu)
-        quaternion_static = trans.quaternion_from_matrix(vel2imu)
-        # print translation_static
-        # print quaternion_static
+    calib_velo2cam = kitti.read_calib_file(calib_velo_to_cam_file)
+    vel2cam0 = np.zeros((4, 4))
+    vel2cam0[:3,:3] = np.array(calib_velo2cam['R']).reshape(-1, 3)
+    vel2cam0[:3,3] = calib_velo2cam['T']
+    vel2cam0[3,3] = 1.
+    print("     ----------- T_velo_cam -----------")
+    print vel2cam0
+
+    T_velo_to_img = np.dot(R_rect_00, vel2cam0)
+    P_velo_to_img = np.dot(P_rect_02, np.dot(R_rect_00, vel2cam0))
+    print("     ----------- P_velo_cam -----------")
+    print P_velo_to_img
+    print("\n\n")
 
     # bounding_boxes[frame index]
     if use_gt:
@@ -195,9 +250,11 @@ if __name__ == "__main__":
 
         ##TODO read data
         pc = load_pc_from_bin(bin_path + "/" + bin_files[idx])
+
         print "\n[",timestamps[idx],"]","# of Point Clouds:", pc.size
 
         image = cv2.imread(img_path + "/" + img_files[idx])
+        image_size = image.shape
 
         ##TODO timestamp
         #header_.stamp = rospy.Time.from_sec(timestamps[idx].total_seconds())
@@ -239,6 +296,28 @@ if __name__ == "__main__":
         # Camera angle filters
         if filter_by_camera_angle_:
             pc = filter_by_camera_angle(pc)
+            xyz = pc.copy()
+            xyz[:,3] = 1.0
+            # project into image
+            velo_img = np.dot(P_velo_to_img, xyz.T).T
+            # normalize homogeneous coordinates
+            velo_img = np.true_divide(velo_img[:,:2], velo_img[:,[-1]])
+            velo_img = np.round(velo_img).astype(np.uint16)
+
+            # compute depth in Camera coordinate
+            pc_img = np.dot(T_velo_to_img, xyz.T).T
+            depth = np.sqrt(np.square(pc_img[:, 0]) + np.square(pc_img[:, 1]) + np.square(pc_img[:, 2]))
+            depth = depth / (max(depth) - min(depth))
+
+            for pt in range(0, velo_img.shape[0]):
+                row_idx = velo_img[pt, 1]
+                col_idx = velo_img[pt, 0]
+
+                if (row_idx >= 0 and row_idx < image_size[0]) \
+                    and (col_idx >= 0 and col_idx < image_size[1]):
+                    # image[row_idx][col_idx] = get_rainbow_color(pc[pt][3])
+                    image[row_idx][col_idx] = get_rainbow_color(depth[pt])
+                    # print
 
         places = None
         rotates_z = None
