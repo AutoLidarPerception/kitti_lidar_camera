@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package>
-  <name>lidar_camera</name>
+  <name>kitti_lidar_camera</name>
   <version>0.0.0</version>
-  <description>The lidar camera fusion package</description>
+  <description>The KiTTI LiDAR-Camera Fusion package</description>
 
   <!-- One maintainer tag required, multiple allowed, one person per tag -->
   <!-- Example:  -->

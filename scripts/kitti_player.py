@@ -18,23 +18,12 @@ from tf import transformations as trans
 
 import cv2
 import datetime as dt
-# import time
-# from collections import namedtuple
 import numpy as np
-import math
-import struct
 
 import pykitti.utils as kitti
 
-from kitti import read_label_from_xml
-from kitti import load_pc_from_bin
-from kitti import filter_by_camera_angle
-from kitti import get_boxcorners
-from kitti import publish_raw_clouds
-from kitti import publish_rgb_clouds
-from kitti import publish_ground_truth_boxes
-from kitti import publish_ground_truth_markers
-from kitti import publish_raw_image
+import utils.KittiPreprocessor as Preprocessor
+import utils.Publisher as KittiPublisher
 
 '''
     sudo apt-get install python-evdev
@@ -58,38 +47,6 @@ def on_keyboard(name_dev):
             if (event.value!=0) and (event.code!=0):
                 # KEY_VAL will keep until next pressed
                 KEY_VAL = event.code
-
-"""
-  https://github.com/ros-visualization/rviz/blob/kinetic-devel/src/rviz/default_plugin/point_cloud_transformers.cpp
-  :return
-    Rainbow color (rgb8) from val in [0., 1.]
-"""
-def get_rainbow_color(val, min_val=0., diff=255):
-    value = 1.0 - (val - min_val)
-    # restrict value between 0 and 1
-    value = max(value, 0.)
-    value = min(value, 1.)
-
-    h = value * 5.0 + 1.0
-    i = int(h)
-    f = h - i
-    # if i is even
-    if not i&1:
-        f = 1 - f
-    n = int((1 - f)*diff)
-    bgr = [0]*3
-    if i <= 1:
-        bgr[2] = n; bgr[1] = 0; bgr[0] = 255
-    elif i == 2:
-        bgr[2] = 0; bgr[1] = n; bgr[0] = 255
-    elif i == 3:
-        bgr[2] = 0; bgr[1] = 255; bgr[0] = n
-    elif i == 4:
-        bgr[2] = n; bgr[1] = 255; bgr[0] = 0
-    elif i >= 5:
-        bgr[2] = 255; bgr[1] = n; bgr[0] = 0
-    # print bgr
-    return bgr
 
 
 if __name__ == "__main__":
@@ -131,8 +88,8 @@ if __name__ == "__main__":
     # Publisher of bounding box
     pub_clusters = rospy.Publisher("/kitti/points_clusters", PointCloud2, queue_size=1000000)
 
-    static_tf_sender = tf.TransformBroadcaster();
-    pose_tf_sender = tf.TransformBroadcaster();
+    static_tf_sender = tf.TransformBroadcaster()
+    pose_tf_sender = tf.TransformBroadcaster()
 
     # Shared header for synchronization
     header_ = std_msgs.msg.Header()
@@ -163,7 +120,6 @@ if __name__ == "__main__":
             # give nanoseconds, so need to truncate last 4 characters to
             # get rid of \n (counts as 1) and extra 3 digits
             t = dt.datetime.strptime(line[:-4], '%Y-%m-%d %H:%M:%S.%f')
-            # t = dt.datetime.strptime(line, '%Y-%m-%d %H:%M:%S.%f')
             timestamps.append(t)
 
     bin_files = []
@@ -205,8 +161,6 @@ if __name__ == "__main__":
     vel2imu = trans.inverse_matrix(imu2vel)
     translation_static = trans.translation_from_matrix(vel2imu)
     quaternion_static = trans.quaternion_from_matrix(vel2imu)
-    # print translation_static
-    # print quaternion_static
 
     calib_cam2cam = kitti.read_calib_file(calib_cam_to_cam_file)
     # To project a 3D point x in reference camera coordinates to a point y on the i'th image plane,
@@ -230,15 +184,20 @@ if __name__ == "__main__":
     print("     ----------- T_velo_cam -----------")
     print vel2cam0
 
-    T_velo_to_img = np.dot(R_rect_00, vel2cam0)
+    # compute transform matrix
+    T_velo_to_cam = np.dot(R_rect_00, vel2cam0)
+    print("     ----------- T_velo_cam -----------")
+    print T_velo_to_cam
+    print("\n\n")
+    # P_velo_to_img = np.dot(P_rect_02, T_velo_to_cam)
     P_velo_to_img = np.dot(P_rect_02, np.dot(R_rect_00, vel2cam0))
-    print("     ----------- P_velo_cam -----------")
+    print("     ----------- P_velo_image -----------")
     print P_velo_to_img
     print("\n\n")
 
     # bounding_boxes[frame index]
     if use_gt:
-        bounding_boxes, tracklet_counter = read_label_from_xml(tracklet_file, care_objects)
+        bounding_boxes, tracklet_counter = Preprocessor.read_label_from_xml(tracklet_file, care_objects)
 
     idx = 0
     # support circular access ...-2,-1,0,1,2...
@@ -251,13 +210,11 @@ if __name__ == "__main__":
             sys.exit(0)
 
         ##TODO read data
-        pc = load_pc_from_bin(bin_path + "/" + bin_files[idx])
+        pc = Preprocessor.load_pc_from_bin(bin_path + "/" + bin_files[idx])
 
         print "\n[",timestamps[idx],"]","# of Point Clouds:", pc.size
 
         image = cv2.imread(img_path + "/" + img_files[idx])
-        image_size = image.shape
-        image_depth = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
 
         ##TODO timestamp
         #header_.stamp = rospy.Time.from_sec(timestamps[idx].total_seconds())
@@ -275,9 +232,6 @@ if __name__ == "__main__":
         static_tf_sender.sendTransform(translation_static, quaternion_static,
                                        header_.stamp,
                                        vel_frame_, imu_frame_)
-        # print poses[idx]
-        # print poses[idx][:3,:3]
-        # euler = transform.rotationMatrixToEulerAngles(poses[idx][0:3,0:3])
 
         translation = trans.translation_from_matrix(poses[idx])
         quaternion = trans.quaternion_from_matrix(poses[idx])
@@ -296,44 +250,11 @@ if __name__ == "__main__":
             cv2.namedWindow(img_window, cv2.WINDOW_NORMAL)
             cv2.resizeWindow(img_window, window_width, window_height)
 
-        # Camera angle filters
         if filter_by_camera_angle_:
-            pc = filter_by_camera_angle(pc)
-
-            # XYZRGB point cloud
-            pc_rgb = np.zeros((pc.shape[0], 4), dtype=np.float32)
-            # pc_rgb = np.zeros((pc.shape[0], 6), dtype=np.float32)
-            pc_rgb[:, :3] = pc[:, :3]
-
-            xyz = pc.copy()
-            xyz[:,3] = 1.0
-            # project into image
-            velo_img = np.dot(P_velo_to_img, xyz.T).T
-            # normalize homogeneous coordinates
-            velo_img = np.true_divide(velo_img[:,:2], velo_img[:,[-1]])
-            velo_img = np.round(velo_img).astype(np.uint16)
-
-            # compute depth in Camera coordinate
-            pc_img = np.dot(T_velo_to_img, xyz.T).T
-            depth = np.sqrt(np.square(pc_img[:, 0]) + np.square(pc_img[:, 1]) + np.square(pc_img[:, 2]))
-            depth = depth / (max(depth) - min(depth))
-
-            for pt in range(0, velo_img.shape[0]):
-                row_idx = velo_img[pt, 1]
-                col_idx = velo_img[pt, 0]
-
-                if (row_idx >= 0 and row_idx < image_size[0]) \
-                    and (col_idx >= 0 and col_idx < image_size[1]):
-                    # assign image color to point cloud
-                    color =   (image[row_idx][col_idx][2] << 16) \
-                            | (image[row_idx][col_idx][1] << 8) \
-                            | image[row_idx][col_idx][0]
-                    pc_rgb[pt, 3] = color
-                    # pc_rgb[pt, 3] = image[row_idx][col_idx][2]
-                    # pc_rgb[pt, 4] = image[row_idx][col_idx][1]
-                    # pc_rgb[pt, 5] = image[row_idx][col_idx][0]
-                    # image_depth[row_idx][col_idx] = get_rainbow_color(pc[pt][3])
-                    image_depth[row_idx][col_idx] = get_rainbow_color(depth[pt])
+            # Camera angle filters
+            pc = Preprocessor.filter_by_camera_angle(pc)
+            # XYZRGB point cloud and depth image
+            pc_rgb, image_depth = Preprocessor.lidar_camera_fusion(pc, image, T_velo_to_cam, P_velo_to_img)
 
         places = None
         rotates_z = None
@@ -349,30 +270,29 @@ if __name__ == "__main__":
             size = bounding_boxes[idx]["size"]
 
             # Create 8 corners of bounding box
-            corners = get_boxcorners(places, rotates_z, size)
+            corners = Preprocessor.get_boxcorners(places, rotates_z, size)
 
-        publish_raw_clouds(pub_points, header_, pc)
-        publish_rgb_clouds(pub_points_rgb, header_, pc_rgb)
+        KittiPublisher.publish_raw_clouds(pub_points, header_, pc)
+        KittiPublisher.publish_rgb_clouds(pub_points_rgb, header_, pc_rgb)
 
         if corners is not None:
-            publish_ground_truth_boxes(ground_truth_pub_, header_, places, rotates_z, size)
+            KittiPublisher.publish_ground_truth_boxes(ground_truth_pub_, header_, places, rotates_z, size)
             # publish_bounding_vertex(pub_vertex, header_, corners.reshape(-1, 3))
             # publish_img_bb(pub_img_bb, header_, corners.reshape(-1, 3))
-            publish_ground_truth_markers(object_marker_pub_, header_, corners.reshape(-1, 3))
+            KittiPublisher.publish_ground_truth_markers(object_marker_pub_, header_, corners.reshape(-1, 3))
             # publish_clusters(pub_clusters, header_, pc, corners.reshape(-1, 3))
         elif use_gt:
             print "no object in current frame: " + bin_files[idx]
             # publish empty message
-            publish_ground_truth_boxes(ground_truth_pub_, header_, None, None, None)
-            publish_ground_truth_markers(object_marker_pub_, header_, None)
+            KittiPublisher.publish_ground_truth_boxes(ground_truth_pub_, header_, None, None, None)
+            KittiPublisher.publish_ground_truth_markers(object_marker_pub_, header_, None)
 
 
         """
             publish RGB image
         """
-        image_depth = cv2.cvtColor(image_depth, cv2.COLOR_HSV2BGR)
-        publish_raw_image(pub_img_depth, header_, image_depth)
-        publish_raw_image(pub_img, header_, image)
+        KittiPublisher.publish_raw_image(pub_img_depth, header_, image_depth)
+        KittiPublisher.publish_raw_image(pub_img, header_, image)
         print "###########"
         print "[INFO] Show image: ",img_files[idx]
         if mode != "play":

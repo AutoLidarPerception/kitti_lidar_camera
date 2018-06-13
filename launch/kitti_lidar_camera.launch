@@ -12,41 +12,19 @@
     <!--<arg name="mode" default="observation" />-->
 
     <!-- default 10Hz, the same as LiDAR -->
-    <arg name="fps" default="8" />
+    <arg name="fps" default="10" />
     <!-- for learning node training -->
     <!--<arg name="fps" default="0.5" />-->
 
-    <!-- static scenario-->
-    <!--城市道路十字路口-->
-    <!--<arg name="kitti_data_path" default="$(find kitti_ros)/../../data/2011_09_26/2011_09_26_drive_0017_sync"/>-->
-    <!--乡村道路十字路口-->
-    <!--<arg name="kitti_data_path" default="$(find kitti_ros)/../../data/2011_09_26/2011_09_26_drive_0060_sync"/>-->
-
     <!-- move scenario-->
-    <!--铁路旁-->
-    <!--<arg name="kitti_data_path" default="$(find kitti_ros)/../../data/2011_09_26/2011_09_26_drive_0001_sync"/>-->
     <!--城郊道路-->
-    <arg name="kitti_data_path" default="$(find lidar_camera)/../../data/2011_09_26/2011_09_26_drive_0005_sync"/>
-    <!--城市道路-->
-    <!--<arg name="kitti_data_path" default="$(find kitti_ros)/../../data/2011_09_26/2011_09_26_drive_0014_sync"/>-->
-    <!--城市道路十字路口-->
-    <!-- <arg name="kitti_data_path" default="$(find kitti_ros)/../../data/2011_09_26/2011_09_26_drive_0018_sync"/> -->
-    <!--小镇美食街-->
-    <!--<arg name="kitti_data_path" default="$(find kitti_ros)/../../data/2011_09_26/2011_09_26_drive_0091_sync"/>-->
-    <!--林间道路-->
-    <!--<arg name="kitti_data_path" default="$(find kitti_ros)/../../data/2011_09_26/2011_09_26_drive_0027_sync"/>-->
-
-    <!-- without ground truth -->
-    <!--复杂住宅区-->
-    <!--<arg name="kitti_data_path" default="$(find kitti_ros)/../../data/2011_09_26/2011_09_26_drive_0117_sync"/>-->
-    <!--红绿灯路口-->
-    <!--<arg name="kitti_data_path" default="$(find kitti_ros)/../../data/2011_09_29/2011_09_29_drive_0026_sync"/>-->
+    <arg name="kitti_data_path" default="$(find kitti_lidar_camera)/../../data/2011_09_26/2011_09_26_drive_0005_sync"/>
 
     <arg name="filter_by_camera_angle" default="true"/>
     <!--<arg name="filter_by_camera_angle" default="false"/>-->
 
     <!-- load -->
-    <node name="kitti_player" pkg="lidar_camera" type="kitti_player.py" output="screen">
+    <node name="kitti_player" pkg="kitti_lidar_camera" type="kitti_player.py" output="screen">
         <param name="keyboard_file" value="$(arg keyboard_file)"/>
 
         <param name="vel_frame" value="$(arg vel_frame)"/>
@@ -65,6 +43,5 @@
 
         <param name="filter_by_camera_angle" value="$(arg filter_by_camera_angle)"/>
     </node>
-
 
 </launch>

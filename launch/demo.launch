@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<launch>
+    <!-- Keyboard listener is based on Linux input subsystem -->
+    <arg name="keyboard_file" default="/dev/input/event3" />
+
+    <arg name="vel_frame" default="velodyne" />
+    <arg name="imu_frame" default="imu" />
+    <arg name="world_frame" default="world" />
+
+    <arg name="mode" default="play" />
+    <!--<arg name="mode" default="observation" />-->
+
+    <!-- default 10Hz, the same as LiDAR -->
+    <arg name="fps" default="10" />
+    <!-- for learning node training -->
+    <!--<arg name="fps" default="0.5" />-->
+
+    <!-- move scenario-->
+    <!--城郊道路-->
+    <arg name="kitti_data_path" default="$(find kitti_lidar_camera)/../../data/2011_09_26/2011_09_26_drive_0005_sync"/>
+
+    <arg name="filter_by_camera_angle" default="true"/>
+    <!--<arg name="filter_by_camera_angle" default="false"/>-->
+
+    <!-- load -->
+    <node name="kitti_player" pkg="kitti_lidar_camera" type="kitti_player.py" output="screen">
+        <param name="keyboard_file" value="$(arg keyboard_file)"/>
+
+        <param name="vel_frame" value="$(arg vel_frame)"/>
+        <param name="imu_frame" value="$(arg imu_frame)"/>
+        <param name="world_frame" value="$(arg world_frame)"/>
+
+        <param name="mode" value="$(arg mode)"/>
+        <param name="fps" value="$(arg fps)"/>
+        <param name="kitti_data_path" value="$(arg kitti_data_path)"/>
+
+        <!-- []  means no forground objects -->
+        <!--<rosparam param="care_objects">[ ]</rosparam>-->
+        <rosparam param="care_objects">['Car','Van','Truck','Pedestrian','Sitter','Cyclist','Tram','Misc']</rosparam>
+        <!--<rosparam param="care_objects">['Pedestrian']</rosparam>-->
+        <!--<rosparam param="care_objects">['Car', 'Van', 'Truck']</rosparam>-->
+
+        <param name="filter_by_camera_angle" value="$(arg filter_by_camera_angle)"/>
+    </node>
+
+
+    <!-- Launch rviz for visualization -->
+    <node name="rviz" pkg="rviz" type="rviz" args="-d $(find kitti_lidar_camera)/rviz/kitti.rviz"/>
+
+</launch>
