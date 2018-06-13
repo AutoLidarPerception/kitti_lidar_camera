@@ -163,7 +163,8 @@ include_directories(
 catkin_install_python(PROGRAMS
     scripts/utils/XmlParser.py
     scripts/utils/Color.py
-    scripts/kitti.py
+    scripts/utils/Publisher.py
+    scripts/utils/KittiPreprocessor.py
     scripts/kitti_player.py
     DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/${PROJECT_NAME}
 )
