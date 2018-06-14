@@ -44,7 +44,6 @@
         <param name="filter_by_camera_angle" value="$(arg filter_by_camera_angle)"/>
     </node>
 
-
     <!-- Launch rviz for visualization -->
     <node name="rviz" pkg="rviz" type="rviz" args="-d $(find kitti_lidar_camera)/rviz/kitti.rviz"/>
 

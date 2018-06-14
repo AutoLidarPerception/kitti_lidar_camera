@@ -1,7 +1,7 @@
 # kitti_lidar_camera
 　　KiTTI LiDAR-Camera Fusion, implemented using [kitti_ros](https://github.com/Durant35/kitti_ros).
 <p align="center">
-    <img src="./readme/demo.png" width="720px" alt=""/>
+    <img src=".readme/demo.png" width="720px" alt=""/>
 </p>
 
 ## TODO list
